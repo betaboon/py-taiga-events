@@ -6,7 +6,7 @@ from . import config
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     signing.setConfig(
         salt=config.signing.get('salt'),

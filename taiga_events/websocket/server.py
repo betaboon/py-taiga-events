@@ -36,7 +36,7 @@ class ClientSession(CommandHandlerMeta):
             signing.verifyToken(token)
             self.token = token
             self.session_id = session_id
-            logging.debug("session:{}:authenticate: success".format(
+            logging.info("session:{}:authenticate: success".format(
                 self.client_id
             ))
         except signing.TokenInvalidError:
@@ -49,7 +49,7 @@ class ClientSession(CommandHandlerMeta):
     async def subscribe(self, data):
         routing_key = data.get('routing_key')
 #        await self.events.subscribe(self.id, routing_key)
-        logging.debug("session:{}:subscribe: {}".format(
+        logging.info("session:{}:subscribe: {}".format(
             self.client_id, routing_key
         ))
 
@@ -58,7 +58,7 @@ class ClientSession(CommandHandlerMeta):
     async def unsubscribe(self, message):
         routing_key = message.get('routing_key')
 #        await self.events.unsubscribe(self.id, routing_key)
-        logging.debug("session:{}:unsubscribe: {}".format(
+        logging.info("session:{}:unsubscribe: {}".format(
             self.client_id, routing_key
         ))
 
