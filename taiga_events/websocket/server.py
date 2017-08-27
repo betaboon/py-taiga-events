@@ -4,14 +4,13 @@ import uuid
 import websockets
 
 from taiga_events import signing
+from taiga_events.meta import commandhandler
 from taiga_events.meta.commandhandler import (
-    CommandHandlerMeta,
-    UnknownCommandError, UnauthenticatedError, ValidationError,
     handles_command, requires_authentication, validate
 )
 
 
-class ClientSession(CommandHandlerMeta):
+class ClientSession(commandhandler.CommandHandlerMeta):
     def __init__(self, websocket, client_id):
         self.websocket = websocket
         self.client_id = client_id
@@ -94,15 +93,15 @@ class Server(object):
                 break
             except json.JSONDecodeError:
                 logging.error("server:{}: invalid json".format(client_id))
-            except UnknownCommandError:
+            except commandhandler.UnknownCommandError:
                 logging.error("server:{}: unknown command '{}'".format(
                     client_id, command
                 ))
-            except UnauthenticatedError:
+            except commandhandler.UnauthenticatedError:
                 logging.error("server:{}:{}: unauthenticated".format(
                     client_id, command
                 ))
-            except ValidationError:
+            except commandhandler.ValidationError:
                 logging.error("server:{}:{}: invalid arguments".format(
                     client_id, command
                 ))
