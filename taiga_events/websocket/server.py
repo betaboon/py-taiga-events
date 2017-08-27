@@ -90,6 +90,7 @@ class Server(object):
                 command = data.pop('cmd', '__undefined__')
                 await session.handleCommand(command, data)
             except websockets.ConnectionClosed:
+                logging.info("server:{}: disconnected".format(client_id))
                 break
             except json.JSONDecodeError:
                 logging.error("server:{}: invalid json".format(client_id))
@@ -105,4 +106,3 @@ class Server(object):
                 logging.error("server:{}:{}: invalid arguments".format(
                     client_id, command
                 ))
-        logging.info("server:{}: disconnected".format(client_id))
