@@ -5,8 +5,9 @@ import websockets
 
 from taiga_events import signing
 from taiga_events.meta.commandhandler import (
-    CommandHandlerMeta, UnknownCommandError, UnauthenticatedError,
-    handles_command, requires_authentication
+    CommandHandlerMeta,
+    UnknownCommandError, UnauthenticatedError, ValidationError,
+    handles_command, requires_authentication, validate
 )
 
 
@@ -28,6 +29,7 @@ class ClientSession(CommandHandlerMeta):
             pass
 
     @handles_command('auth')
+    @validate(['data','token'],['data','sessionId'])
     async def authenticate(self, data):
         auth = data.get('data')
         token = auth.get('token')
@@ -46,6 +48,7 @@ class ClientSession(CommandHandlerMeta):
 
     @handles_command
     @requires_authentication
+    @validate('routing_key')
     async def subscribe(self, data):
         routing_key = data.get('routing_key')
 #        await self.events.subscribe(self.id, routing_key)
@@ -55,6 +58,7 @@ class ClientSession(CommandHandlerMeta):
 
     @handles_command
     @requires_authentication
+    @validate('routing_key')
     async def unsubscribe(self, message):
         routing_key = message.get('routing_key')
 #        await self.events.unsubscribe(self.id, routing_key)
@@ -96,6 +100,10 @@ class Server(object):
                 ))
             except UnauthenticatedError:
                 logging.error("server:{}:{}: unauthenticated".format(
+                    client_id, command
+                ))
+            except ValidationError:
+                logging.error("server:{}:{}: invalid arguments".format(
                     client_id, command
                 ))
         logging.info("server:{}: disconnected".format(client_id))

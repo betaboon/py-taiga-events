@@ -20,12 +20,38 @@ def handles_command(*args):
 
 def requires_authentication(func):
     @wraps(func)
-    async def wrap(*args):
+    async def wrapped(*args):
         self = args[0]
         if not self.isAuthenticated():
             raise UnauthenticatedError()
         return await func(*args)
-    return wrap
+    return wrapped
+
+
+def validate(*keyPaths):
+    def wrapper(func):
+        @wraps(func)
+        async def wrapped(*args):
+            for keys in keyPaths:
+                if not isinstance(keys, list):
+                    keys = [keys]
+                val = None
+                for key in keys:
+                    if val:
+                        if isinstance(val, list):
+                            val = [
+                                v.get(key, default)
+                                if v else None for v in val
+                            ]
+                        else:
+                            val = val.get(key, None)
+                    else:
+                        val = dict.get(args[1], key, None)
+                if not val:
+                    raise ValidationError()
+            return await func(*args)
+        return wrapped
+    return wrapper
 
 
 class UnknownCommandError(KeyError):
@@ -33,6 +59,10 @@ class UnknownCommandError(KeyError):
 
 
 class UnauthenticatedError(Exception):
+    pass
+
+
+class ValidationError(Exception):
     pass
 
 
