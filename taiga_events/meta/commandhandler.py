@@ -1,21 +1,31 @@
 from abc import ABCMeta, abstractmethod
+from functools import wraps
 
 
-def handles_command(command):
+def handles_command(*args):
+    func = None
+    func_name = None
+    if len(args) == 1 and callable(args[0]):
+        # @handles_command
+        func = args[0]
+        func_name = func.__name__
+    elif len(args) == 1 and isinstance(args[0], str):
+        # @handles_command('name')
+        func_name = args[0]
     def decorate(func):
-        func.handles_command = command
+        func.handles_command = func_name
         return func
-    return decorate
+    return decorate(func) if func else decorate
 
 
 def requires_authentication(func):
-    async def decorate(*args):
+    @wraps(func)
+    async def wrap(*args):
         self = args[0]
         if not self.isAuthenticated():
             raise UnauthenticatedError()
         return await func(*args)
-            
-    return decorate
+    return wrap
 
 
 class UnknownCommandError(KeyError):

@@ -20,7 +20,7 @@ class ClientSession(CommandHandlerMeta):
     def isAuthenticated(self):
         return self.session_id and self.token
 
-    @handles_command('ping')
+    @handles_command
     async def ping(self, data):
         try:
             await self.websocket.send(json.dumps({'cmd': 'pong'}))
@@ -44,7 +44,7 @@ class ClientSession(CommandHandlerMeta):
                 self.client_id
             ))
 
-    @handles_command('subscribe')
+    @handles_command
     @requires_authentication
     async def subscribe(self, data):
         routing_key = data.get('routing_key')
@@ -53,7 +53,7 @@ class ClientSession(CommandHandlerMeta):
             self.client_id, routing_key
         ))
 
-    @handles_command('unsubscribe')
+    @handles_command
     @requires_authentication
     async def unsubscribe(self, message):
         routing_key = message.get('routing_key')
