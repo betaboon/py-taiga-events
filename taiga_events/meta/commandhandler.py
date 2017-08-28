@@ -28,7 +28,7 @@ def requires_authentication(func):
     return wrapped
 
 
-def validate(*keyPaths):
+def requires_arguments(*paths):
     def wrapper(func):
         @wraps(func)
         async def wrapped(*args):

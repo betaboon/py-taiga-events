@@ -6,7 +6,7 @@ import websockets
 from taiga_events import signing
 from taiga_events.meta import commandhandler
 from taiga_events.meta.commandhandler import (
-    handles_command, requires_authentication, validate
+    handles_command, requires_authentication, requires_arguments
 )
 
 
@@ -28,7 +28,7 @@ class ClientSession(commandhandler.CommandHandlerMeta):
             pass
 
     @handles_command('auth')
-    @validate(['data','token'],['data','sessionId'])
+    @requires_arguments(['data','token'],['data','sessionId'])
     async def authenticate(self, data):
         auth = data.get('data')
         token = auth.get('token')
@@ -47,7 +47,7 @@ class ClientSession(commandhandler.CommandHandlerMeta):
 
     @handles_command
     @requires_authentication
-    @validate('routing_key')
+    @requires_arguments('routing_key')
     async def subscribe(self, data):
         routing_key = data.get('routing_key')
 #        await self.events.subscribe(self.id, routing_key)
@@ -57,7 +57,7 @@ class ClientSession(commandhandler.CommandHandlerMeta):
 
     @handles_command
     @requires_authentication
-    @validate('routing_key')
+    @requires_arguments('routing_key')
     async def unsubscribe(self, message):
         routing_key = message.get('routing_key')
 #        await self.events.unsubscribe(self.id, routing_key)
