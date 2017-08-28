@@ -102,7 +102,7 @@ class Server(object):
                 logging.error("server:{}:{}: unauthenticated".format(
                     client_id, command
                 ))
-            except commandhandler.ValidationError:
+            except commandhandler.MissingArgumentsError:
                 logging.error("server:{}:{}: invalid arguments".format(
                     client_id, command
                 ))

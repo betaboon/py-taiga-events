@@ -32,26 +32,22 @@ def requires_arguments(*paths):
     def wrapper(func):
         @wraps(func)
         async def wrapped(*args):
-            for keys in keyPaths:
-                if not isinstance(keys, list):
-                    keys = [keys]
-                val = None
-                for key in keys:
-                    if val:
-                        if isinstance(val, list):
-                            val = [
-                                v.get(key, default)
-                                if v else None for v in val
-                            ]
-                        else:
-                            val = val.get(key, None)
-                    else:
-                        val = dict.get(args[1], key, None)
-                if not val:
-                    raise ValidationError()
+            for path in paths:
+                try:
+                    val = dictGetByKeyPath(args[1], path)
+                except KeyError:
+                    raise MissingArgumentsError()
             return await func(*args)
         return wrapped
     return wrapper
+
+
+def dictGetByKeyPath(dict, keyPath):
+    keyPath = keyPath if isinstance(keyPath, list) else [keyPath]
+    val = None
+    for key in keyPath:
+        val = val[key] if val else dict[key]
+    return val
 
 
 class UnknownCommandError(KeyError):
@@ -62,7 +58,7 @@ class UnauthenticatedError(Exception):
     pass
 
 
-class ValidationError(Exception):
+class MissingArgumentsError(Exception):
     pass
 
 
