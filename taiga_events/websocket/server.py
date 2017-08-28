@@ -6,7 +6,8 @@ import websockets
 from taiga_events import signing
 from taiga_events.meta import commandhandler
 from taiga_events.meta.commandhandler import (
-    command, require_authentication, validate_arguments
+    command,
+    require_authentication, validate_arguments, consume_arguments
 )
 
 
@@ -21,7 +22,8 @@ class ClientSession(commandhandler.CommandHandlerMeta):
         return self.session_id and self.token
 
     @command
-    async def ping(self, arguments):
+    @consume_arguments
+    async def ping(self):
         try:
             await self.websocket.send(json.dumps({'cmd': 'pong'}))
         except:
@@ -29,8 +31,8 @@ class ClientSession(commandhandler.CommandHandlerMeta):
 
     @command('auth')
     @validate_arguments({'data': ['token', 'sessionId']})
-    async def authenticate(self, arguments):
-        data = arguments.get('data')
+    @consume_arguments
+    async def authenticate(self, data):
         token = data.get('token')
         session_id = data.get('sessionId') # the json-key realy is sessionId
         try:
@@ -47,9 +49,8 @@ class ClientSession(commandhandler.CommandHandlerMeta):
 
     @command
     @require_authentication
-    @validate_arguments('routing_key')
-    async def subscribe(self, arguments):
-        routing_key = arguments.get('routing_key')
+    @consume_arguments
+    async def subscribe(self, routing_key):
 #        await self.events.subscribe(self.id, routing_key)
         logging.info("session:{}:subscribe: {}".format(
             self.client_id, routing_key
@@ -57,9 +58,8 @@ class ClientSession(commandhandler.CommandHandlerMeta):
 
     @command
     @require_authentication
-    @validate_arguments('routing_key')
-    async def unsubscribe(self, arguments):
-        routing_key = arguments.get('routing_key')
+    @consume_arguments
+    async def unsubscribe(self, routing_key):
 #        await self.events.unsubscribe(self.id, routing_key)
         logging.info("session:{}:unsubscribe: {}".format(
             self.client_id, routing_key

@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from functools import wraps
+from inspect import getfullargspec
 
 
 def command(*args):
@@ -53,13 +54,27 @@ def validate_arguments(*spec):
     def wrapper(func):
         @wraps(func)
         async def wrapped(*args, **kwargs):
-            arguments = kwargs.get('arguments', {})
+            arguments = kwargs.get('arguments')
             validate_spec(list(spec), arguments)
             return await func(*args, **kwargs)
         return wrapped
     return wrapper
 
 
+def consume_arguments(func):
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        argspec = getfullargspec(func)
+        argument_names = argspec.args
+        argument_names.remove('self')
+        arguments = kwargs.get('arguments')
+        for name in argument_names:
+            if not name in arguments:
+                raise MissingArgumentError(name)
+            kwargs[name] = arguments.get(name)
+        kwargs.pop('arguments')
+        return func(*args, **kwargs)
+    return wrapped
 
 
 class SpecError(Exception):
