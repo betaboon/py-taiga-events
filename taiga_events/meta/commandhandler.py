@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from functools import wraps
 
 
-def handles_command(*args):
+def command(*args):
     func = None
     func_name = None
     if len(args) == 1 and callable(args[0]):
@@ -18,47 +18,66 @@ def handles_command(*args):
     return decorate(func) if func else decorate
 
 
-def requires_authentication(func):
+def require_authentication(func):
     @wraps(func)
-    async def wrapped(*args):
+    async def wrapped(*args, **kwargs):
         self = args[0]
         if not self.isAuthenticated():
             raise UnauthenticatedError()
-        return await func(*args)
+        return await func(*args, **kwargs)
     return wrapped
 
 
-def requires_arguments(*paths):
+def validate_spec(spec, value, name=None):
+    def childName(parent, child):
+        return child if not parent else "{}.{}".format(name, child)
+    if not isinstance(value, dict):
+        raise InvalidArgumentError(name)
+    elif isinstance(spec, str):
+        if spec not in value:
+            raise MissingArgumentError(childName(name, spec))
+    elif isinstance(spec, list):
+        for subspec in spec:
+            validate_spec(subspec, value, name)
+    elif isinstance(spec, dict):
+        for subname, subspec in spec.items():
+            validate_spec(subname, value, name)
+            validate_spec(
+                subspec, value.get(subname), childName(name, subname)
+            )
+    else:
+        raise InvalidSpecError(spec)
+
+
+def validate_arguments(*spec):
     def wrapper(func):
         @wraps(func)
-        async def wrapped(*args):
-            for path in paths:
-                try:
-                    val = dictGetByKeyPath(args[1], path)
-                except KeyError:
-                    raise MissingArgumentsError()
-            return await func(*args)
+        async def wrapped(*args, **kwargs):
+            arguments = kwargs.get('arguments', {})
+            validate_spec(list(spec), arguments)
+            return await func(*args, **kwargs)
         return wrapped
     return wrapper
 
 
-def dictGetByKeyPath(dict, keyPath):
-    keyPath = keyPath if isinstance(keyPath, list) else [keyPath]
-    val = None
-    for key in keyPath:
-        val = val[key] if val else dict[key]
-    return val
 
 
-class UnknownCommandError(KeyError):
+class SpecError(Exception):
     pass
 
+class InvalidSpecError(SpecError):
+    pass
+
+class InvalidArgumentError(SpecError):
+    pass
+
+class MissingArgumentError(SpecError):
+    pass
+
+class InvalidCommandError(KeyError):
+    pass
 
 class UnauthenticatedError(Exception):
-    pass
-
-
-class MissingArgumentsError(Exception):
     pass
 
 
@@ -70,12 +89,12 @@ class CommandHandlerMeta(metaclass=ABCMeta):
             if callable(obj) and hasattr(obj, "handles_command"):
                 yield obj
 
-    async def handleCommand(self, command, data):
+    async def handleCommand(self, command, arguments):
         for handler in self.handlers:
             if handler.handles_command == command:
-                result = await handler(data)
+                result = await handler(arguments=arguments)
                 return result
-        raise UnknownCommandError()
+        raise InvalidCommandError(command)
 
     @abstractmethod
     def isAuthenticated(self):

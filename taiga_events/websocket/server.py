@@ -6,7 +6,7 @@ import websockets
 from taiga_events import signing
 from taiga_events.meta import commandhandler
 from taiga_events.meta.commandhandler import (
-    handles_command, requires_authentication, requires_arguments
+    command, require_authentication, validate_arguments
 )
 
 
@@ -20,19 +20,19 @@ class ClientSession(commandhandler.CommandHandlerMeta):
     def isAuthenticated(self):
         return self.session_id and self.token
 
-    @handles_command
-    async def ping(self, data):
+    @command
+    async def ping(self, arguments):
         try:
             await self.websocket.send(json.dumps({'cmd': 'pong'}))
         except:
             pass
 
-    @handles_command('auth')
-    @requires_arguments(['data','token'],['data','sessionId'])
-    async def authenticate(self, data):
-        auth = data.get('data')
-        token = auth.get('token')
-        session_id = auth.get('sessionId') # the json-key realy is sessionId
+    @command('auth')
+    @validate_arguments({'data': ['token', 'sessionId']})
+    async def authenticate(self, arguments):
+        data = arguments.get('data')
+        token = data.get('token')
+        session_id = data.get('sessionId') # the json-key realy is sessionId
         try:
             signing.verifyToken(token)
             self.token = token
@@ -45,21 +45,21 @@ class ClientSession(commandhandler.CommandHandlerMeta):
                 self.client_id
             ))
 
-    @handles_command
-    @requires_authentication
-    @requires_arguments('routing_key')
-    async def subscribe(self, data):
-        routing_key = data.get('routing_key')
+    @command
+    @require_authentication
+    @validate_arguments('routing_key')
+    async def subscribe(self, arguments):
+        routing_key = arguments.get('routing_key')
 #        await self.events.subscribe(self.id, routing_key)
         logging.info("session:{}:subscribe: {}".format(
             self.client_id, routing_key
         ))
 
-    @handles_command
-    @requires_authentication
-    @requires_arguments('routing_key')
-    async def unsubscribe(self, message):
-        routing_key = message.get('routing_key')
+    @command
+    @require_authentication
+    @validate_arguments('routing_key')
+    async def unsubscribe(self, arguments):
+        routing_key = arguments.get('routing_key')
 #        await self.events.unsubscribe(self.id, routing_key)
         logging.info("session:{}:unsubscribe: {}".format(
             self.client_id, routing_key
@@ -94,15 +94,19 @@ class Server(object):
                 break
             except json.JSONDecodeError:
                 logging.error("server:{}: invalid json".format(client_id))
-            except commandhandler.UnknownCommandError:
-                logging.error("server:{}: unknown command '{}'".format(
-                    client_id, command
-                ))
             except commandhandler.UnauthenticatedError:
                 logging.error("server:{}:{}: unauthenticated".format(
                     client_id, command
                 ))
-            except commandhandler.MissingArgumentsError:
-                logging.error("server:{}:{}: invalid arguments".format(
+            except commandhandler.InvalidCommandError:
+                logging.error("server:{}: invalid command '{}'".format(
                     client_id, command
+                ))
+            except commandhandler.MissingArgumentError as e:
+                logging.error("server:{}:{}: missing argument '{}'".format(
+                    client_id, command, e
+                ))
+            except commandhandler.InvalidArgumentError as e:
+                logging.error("server:{}:{}: invalid argument '{}'".format(
+                    client_id, command, e
                 ))
