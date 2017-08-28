@@ -18,6 +18,13 @@ class ClientSession(commandhandler.CommandHandlerMeta):
         self.session_id = None
         self.token = None
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.stopConsumingEvents()
+
+    # required for @require_authentication
     def isAuthenticated(self):
         return self.session_id and self.token
 
@@ -78,35 +85,41 @@ class Server(object):
             self.host, self.port
         ))
 
-    async def handleClient(self, websocket, path):
-        client_id = uuid.uuid4()
-        session = ClientSession(websocket, client_id)
-        self.sessions[client_id] = session
-        logging.info("server:{}: client connected".format(client_id))
+    async def handleClientSession(self, session):
         while True:
             try:
-                message = await websocket.recv()
+                message = await session.websocket.recv()
                 data = json.loads(message)
                 command = data.pop('cmd', '__undefined__')
                 await session.handleCommand(command, data)
             except websockets.ConnectionClosed:
-                logging.info("server:{}: disconnected".format(client_id))
                 break
             except json.JSONDecodeError:
-                logging.error("server:{}: invalid json".format(client_id))
+                logging.error("server:{}: invalid json".format(
+                    session.client_id
+                ))
             except commandhandler.UnauthenticatedError:
                 logging.error("server:{}:{}: unauthenticated".format(
-                    client_id, command
+                    session.client_id, command
                 ))
             except commandhandler.InvalidCommandError:
                 logging.error("server:{}: invalid command '{}'".format(
-                    client_id, command
+                    session.client_id, command
                 ))
             except commandhandler.MissingArgumentError as e:
                 logging.error("server:{}:{}: missing argument '{}'".format(
-                    client_id, command, e
+                    session.client_id, command, e
                 ))
             except commandhandler.InvalidArgumentError as e:
                 logging.error("server:{}:{}: invalid argument '{}'".format(
-                    client_id, command, e
+                    session.client_id, command, e
                 ))
+
+
+    async def handleClient(self, websocket, path):
+        client_id = uuid.uuid4()
+        async with ClientSession(websocket, client_id) as session:
+            logging.info("server:{}: client connected".format(client_id))
+            self.sessions[client_id] = session
+            await self.handleClientSession(session)
+            logging.info("server:{}: client disconnected".format(client_id))
