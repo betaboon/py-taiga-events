@@ -13,7 +13,7 @@ def main():
         secret=config.signing.get('secret')
     )
 
-    events = amqp.EventsConsumer(
+    events = amqp.EventConsumer(
         host=config.amqp.get('host'),
         port=config.amqp.get('port'),
         virtualhost=config.amqp.get('virtualhost'),

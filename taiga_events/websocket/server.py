@@ -26,7 +26,7 @@ class ClientSession(CommandHandlerMeta, EventHandlerMeta):
         await self.close()
 
     async def close(self):
-        await self.stopConsumingEvents(self.client_id)
+        await self.stopConsumingEvents()
 
     async def handleEvent(self, event):
         if event.get('session_id') == self.session_id:
@@ -71,13 +71,13 @@ class ClientSession(CommandHandlerMeta, EventHandlerMeta):
                 self.client_id
             ))
         else:
-            await self.startConsumingEvents(self.client_id)
+            await self.startConsumingEvents()
 
     @command
     @require_authentication
     @consume_arguments
     async def subscribe(self, routing_key):
-        await self.subscribeEvents(self.client_id, routing_key)
+        await self.subscribeEvents(routing_key)
         logging.info("session:{}:subscribe: {}".format(
             self.client_id, routing_key
         ))
@@ -86,7 +86,7 @@ class ClientSession(CommandHandlerMeta, EventHandlerMeta):
     @require_authentication
     @consume_arguments
     async def unsubscribe(self, routing_key):
-        await self.unsubscribeEvents(self.client_id, routing_key)
+        await self.unsubscribeEvents(routing_key)
         logging.info("session:{}:unsubscribe: {}".format(
             self.client_id, routing_key
         ))
