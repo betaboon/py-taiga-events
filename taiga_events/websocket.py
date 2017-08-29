@@ -3,10 +3,9 @@ import logging
 import uuid
 import websockets
 
-from taiga_events import signing
+from taiga_events import commandhandler, signing
 from taiga_events.amqp import EventHandlerMeta
-from taiga_events.meta import commandhandler
-from taiga_events.meta.commandhandler import (
+from taiga_events.commandhandler import (
     CommandHandlerMeta, command,
     require_authentication, validate_arguments, consume_arguments
 )
