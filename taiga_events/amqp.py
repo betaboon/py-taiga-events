@@ -64,9 +64,6 @@ class EventConsumer(metaclass=Singleton):
         self.queue_names = {}
         self.consumer_tags = {}
 
-    def isConnected(self):
-        return self.protocol is not None
-
     async def consume(self):
         try:
             transport, protocol = await aioamqp.connect(

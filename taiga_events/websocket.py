@@ -27,6 +27,7 @@ class ClientSession(CommandHandlerMeta, EventHandlerMeta):
     async def close(self):
         await self.stopConsumingEvents()
 
+    # required by EventsHandlerMeta
     async def handleEvent(self, event):
         if event.get('session_id') == self.session_id:
             return
@@ -40,7 +41,7 @@ class ClientSession(CommandHandlerMeta, EventHandlerMeta):
                 self.client_id
             ))
 
-    # required for @require_authentication
+    # required by CommandHandlerMeta
     def isAuthenticated(self):
         return self.session_id and self.token
 
@@ -133,11 +134,11 @@ class Server(object):
                     session.client_id, command, e
                 ))
 
-
     async def handleClient(self, websocket, path):
         client_id = uuid.uuid4()
         async with ClientSession(websocket, client_id) as session:
             logging.info("server:{}: client connected".format(client_id))
             self.sessions[client_id] = session
             await self.handleClientSession(session)
-            logging.info("server:{}: client disconnected".format(client_id))
+        del self.sessions[client_id]
+        logging.info("server:{}: client disconnected".format(client_id))

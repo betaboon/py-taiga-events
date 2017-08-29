@@ -5,6 +5,10 @@ import hmac
 from .meta import Singleton
 
 
+class TokenInvalidError(ValueError):
+    pass
+
+
 class SigningConfig(metaclass=Singleton):
     def __init__(self):
         self.salt = None
@@ -15,10 +19,6 @@ class SigningConfig(metaclass=Singleton):
 
     def setSecret(self, secret):
         self.secret = secret
-
-
-class TokenInvalidError(ValueError):
-    pass
 
 
 def setConfig(salt, secret):

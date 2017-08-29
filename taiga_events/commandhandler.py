@@ -3,6 +3,45 @@ from functools import wraps
 from inspect import getfullargspec
 
 
+class SpecError(Exception):
+    pass
+
+class InvalidSpecError(SpecError):
+    pass
+
+class InvalidArgumentError(SpecError):
+    pass
+
+class MissingArgumentError(SpecError):
+    pass
+
+class InvalidCommandError(KeyError):
+    pass
+
+class UnauthenticatedError(Exception):
+    pass
+
+
+class CommandHandlerMeta(metaclass=ABCMeta):
+    @abstractmethod
+    def isAuthenticated(self):
+        pass
+
+    @property
+    def handlers(self):
+        for attr in dir(self):
+            obj = getattr(self, attr)
+            if callable(obj) and hasattr(obj, "handles_command"):
+                yield obj
+
+    async def handleCommand(self, command, arguments):
+        for handler in self.handlers:
+            if handler.handles_command == command:
+                result = await handler(arguments=arguments)
+                return result
+        raise InvalidCommandError(command)
+
+
 def command(*args):
     func = None
     func_name = None
@@ -75,42 +114,3 @@ def consume_arguments(func):
         kwargs.pop('arguments')
         return func(*args, **kwargs)
     return wrapped
-
-
-class SpecError(Exception):
-    pass
-
-class InvalidSpecError(SpecError):
-    pass
-
-class InvalidArgumentError(SpecError):
-    pass
-
-class MissingArgumentError(SpecError):
-    pass
-
-class InvalidCommandError(KeyError):
-    pass
-
-class UnauthenticatedError(Exception):
-    pass
-
-
-class CommandHandlerMeta(metaclass=ABCMeta):
-    @property
-    def handlers(self):
-        for attr in dir(self):
-            obj = getattr(self, attr)
-            if callable(obj) and hasattr(obj, "handles_command"):
-                yield obj
-
-    async def handleCommand(self, command, arguments):
-        for handler in self.handlers:
-            if handler.handles_command == command:
-                result = await handler(arguments=arguments)
-                return result
-        raise InvalidCommandError(command)
-
-    @abstractmethod
-    def isAuthenticated(self):
-        pass
