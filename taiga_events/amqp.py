@@ -1,8 +1,39 @@
+from abc import ABCMeta, abstractmethod
 import aioamqp
+import json
 import logging
 
+from .meta import Singleton
 
-class Events(object):
+
+class EventHandlerMeta(metaclass=ABCMeta):
+    @abstractmethod
+    async def handleEvent(self, event):
+        pass
+
+    async def handleRawEvent(self, channel, body, envelope, properties):
+        try:
+            event = json.loads(body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logging.error("event:handler: invalid json")
+        else:
+            event['routing_key'] = envelope.routing_key
+            await self.handleEvent(event)
+
+    async def startConsumingEvents(self, client_id):
+        await EventsConsumer().register(client_id, self.handleRawEvent)
+
+    async def stopConsumingEvents(self, client_id):
+        await EventsConsumer().unregister(client_id)
+
+    async def subscribeEvents(self, client_id, routing_key):
+        await EventsConsumer().subscribe(client_id, routing_key)
+
+    async def unsubscribeEvents(self, client_id, routing_key):
+        await EventsConsumer().unsubscribe(client_id, routing_key)
+
+
+class EventsConsumer(metaclass=Singleton):
     def __init__(self, host, port, virtualhost, username, password):
         self.host = host
         self.port = port
@@ -16,7 +47,10 @@ class Events(object):
         self.queues = {}
         self.consumers = {}
 
-    async def start(self):
+    def isConnected(self):
+        return self.protocol is not None
+
+    async def consume(self):
         try:
             transport, protocol = await aioamqp.connect(
                 host=self.host,
@@ -25,12 +59,14 @@ class Events(object):
                 password=self.password,
                 virtualhost=self.virtualhost
             )
+            logging.info("amqp:events: connected")
             self.transport = transport
             self.protocol = protocol
-            logging.info("events: connected")
         except aioamqp.AmqpClosedConnection:
-            logging.error("events: failed to connect")
+            logging.error("amqp:events: disconnected")
             return
+        except ConnectionRefusedError:
+            logging.error("amqp:events: failed to connect")
 
     async def getClientChannel(self, client_id):
         if not client_id in self.channels:
@@ -40,7 +76,7 @@ class Events(object):
     async def closeClientChannel(self, client_id):
         if client_id in self.channels:
             channel = await self.getClientChannel(client_id)
-            channel.close()
+            await channel.close()
             del self.channels[client_id]
 
     async def getClientQueue(self, client_id):
@@ -103,8 +139,8 @@ class Events(object):
             ))
         return result
 
-    async def addClient(self, client_id, callback):
+    async def register(self, client_id, callback):
         await self.getClientConsumer(client_id, callback)
 
-    async def removeClient(self, client_id):
+    async def unregister(self, client_id):
         await self.closeClientChannel(client_id)

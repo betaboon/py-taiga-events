@@ -4,14 +4,15 @@ import uuid
 import websockets
 
 from taiga_events import signing
+from taiga_events.amqp import EventHandlerMeta
 from taiga_events.meta import commandhandler
 from taiga_events.meta.commandhandler import (
-    command,
+    CommandHandlerMeta, command,
     require_authentication, validate_arguments, consume_arguments
 )
 
 
-class ClientSession(commandhandler.CommandHandlerMeta):
+class ClientSession(CommandHandlerMeta, EventHandlerMeta):
     def __init__(self, websocket, client_id):
         self.websocket = websocket
         self.client_id = client_id
@@ -22,7 +23,23 @@ class ClientSession(commandhandler.CommandHandlerMeta):
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        await self.stopConsumingEvents()
+        await self.close()
+
+    async def close(self):
+        await self.stopConsumingEvents(self.client_id)
+
+    async def handleEvent(self, event):
+        if event.get('session_id') == self.session_id:
+            return
+        try:
+            await self.websocket.send(json.dumps(event))
+            logging.debug("session:{}:event: {}".format(
+                self.client_id, event
+            ))
+        except:
+            logging.error("session:{}:event: failed to send".format(
+                self.client_id
+            ))
 
     # required for @require_authentication
     def isAuthenticated(self):
@@ -53,12 +70,14 @@ class ClientSession(commandhandler.CommandHandlerMeta):
             logging.error("session:{}:authenticate: failed".format(
                 self.client_id
             ))
+        else:
+            await self.startConsumingEvents(self.client_id)
 
     @command
     @require_authentication
     @consume_arguments
     async def subscribe(self, routing_key):
-#        await self.events.subscribe(self.id, routing_key)
+        await self.subscribeEvents(self.client_id, routing_key)
         logging.info("session:{}:subscribe: {}".format(
             self.client_id, routing_key
         ))
@@ -67,7 +86,7 @@ class ClientSession(commandhandler.CommandHandlerMeta):
     @require_authentication
     @consume_arguments
     async def unsubscribe(self, routing_key):
-#        await self.events.unsubscribe(self.id, routing_key)
+        await self.unsubscribeEvents(self.client_id, routing_key)
         logging.info("session:{}:unsubscribe: {}".format(
             self.client_id, routing_key
         ))
