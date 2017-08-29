@@ -1,33 +1,35 @@
 import asyncio
 import logging
 
-from . import Events, Server, Signer
+from taiga_events import amqp, signing, websocket
 from . import config
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    server = Server(
+    signing.setConfig(
+        salt=config.signing.get('salt'),
+        secret=config.signing.get('secret')
+    )
+
+    events = amqp.EventConsumer(
+        host=config.amqp.get('host'),
+        port=config.amqp.get('port'),
+        virtualhost=config.amqp.get('virtualhost'),
+        username=config.amqp.get('username'),
+        password=config.amqp.get('password'),
+    )
+
+    server = websocket.Server(
         host=config.websocket.get('host'),
-        port=config.websocket.get('port'),
-        signer = Signer(
-            config.signing.get('salt'),
-            config.signing.get('secret')
-        ),
-        events = Events(
-            config.amqp.get('host'),
-            config.amqp.get('port'),
-            config.amqp.get('virtualhost'),
-            config.amqp.get('username'),
-            config.amqp.get('password')
-        )
+        port=config.websocket.get('port')
     )
     
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(server.start())
+    loop.run_until_complete(server.serve())
+    loop.run_until_complete(events.consume())
     loop.run_forever()
-    logging.info("Stopping...")
 
 if __name__ == "__main__":
     main()

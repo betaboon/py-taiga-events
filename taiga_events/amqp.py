@@ -1,8 +1,13 @@
+from abc import ABCMeta, abstractmethod
 import aioamqp
+import json
 import logging
+import uuid
+
+from .meta import Singleton
 
 
-class Events(object):
+class EventConsumer(metaclass=Singleton):
     def __init__(self, host, port, virtualhost, username, password):
         self.host = host
         self.port = port
@@ -13,10 +18,10 @@ class Events(object):
         self.transport = None
         self.protocol = None
         self.channels = {}
-        self.queues = {}
-        self.consumers = {}
+        self.queue_names = {}
+        self.consumer_tags = {}
 
-    async def start(self):
+    async def consume(self):
         try:
             transport, protocol = await aioamqp.connect(
                 host=self.host,
@@ -25,27 +30,29 @@ class Events(object):
                 password=self.password,
                 virtualhost=self.virtualhost
             )
+            logging.info("amqp:events: connected")
             self.transport = transport
             self.protocol = protocol
-            logging.info("events: connected")
         except aioamqp.AmqpClosedConnection:
-            logging.error("events: failed to connect")
+            logging.error("amqp:events: disconnected")
             return
+        except ConnectionRefusedError:
+            logging.error("amqp:events: failed to connect")
 
-    async def getClientChannel(self, client_id):
-        if not client_id in self.channels:
-            self.channels[client_id] = await self.protocol.channel()
-        return self.channels[client_id]
+    async def getChannel(self, consumer_tag):
+        if not consumer_tag in self.channels:
+            self.channels[consumer_tag] = await self.protocol.channel()
+        return self.channels[consumer_tag]
 
-    async def closeClientChannel(self, client_id):
-        if client_id in self.channels:
-            channel = await self.getClientChannel(client_id)
-            channel.close()
-            del self.channels[client_id]
+    async def closeChannel(self, consumer_tag):
+        if consumer_tag in self.channels:
+            channel = await self.getChannel(consumer_tag)
+            await channel.close()
+            del self.channels[consumer_tag]
 
-    async def getClientQueue(self, client_id):
-        if not client_id in self.queues:
-            channel = await self.getClientChannel(client_id)
+    async def getQueue(self, consumer_tag):
+        if not consumer_tag in self.queue_names:
+            channel = await self.getChannel(consumer_tag)
             await channel.exchange(
                 exchange_name=self.exchange_name,
                 type_name='topic',
@@ -58,24 +65,26 @@ class Events(object):
                 auto_delete=True,
                 exclusive=True
             )
-            self.queues[client_id] = queue_result['queue']
-        return self.queues[client_id]
+            self.queue_names[consumer_tag] = queue_result['queue']
+        return self.queue_names[consumer_tag]
 
-    async def getClientConsumer(self, client_id, callback):
-        if not client_id in self.consumers:
-            channel = await self.getClientChannel(client_id)
-            queue_name = await self.getClientQueue(client_id)
+    async def getConsumer(self, consumer_tag, callback):
+        if not consumer_tag in self.consumer_tags:
+            channel = await self.getChannel(consumer_tag)
+            queue_name = await self.getQueue(consumer_tag)
             result = await channel.basic_consume(
                 callback=callback,
                 queue_name=queue_name,
+                consumer_tag=consumer_tag,
                 no_ack=True
             )
-            self.consumers[client_id] = result['consumer_tag']
-        return self.consumers[client_id]
+            # these should be equal and therefore redundant
+            self.consumer_tags[consumer_tag] = result['consumer_tag']
+        return self.consumer_tags[consumer_tag]
 
-    async def subscribe(self, client_id, routing_key):
-        channel = await self.getClientChannel(client_id)
-        queue_name = await self.getClientQueue(client_id)
+    async def subscribe(self, consumer_tag, routing_key):
+        channel = await self.getChannel(consumer_tag)
+        queue_name = await self.getQueue(consumer_tag)
         result = await channel.queue_bind(
             exchange_name=self.exchange_name,
             queue_name=queue_name,
@@ -84,13 +93,13 @@ class Events(object):
         if not result:
             logging.error(
                 "amqp:events:{}:subscribe: {}; failed".format(
-                    client_id, routing_key
+                    consumer_tag, routing_key
             ))
         return result
 
-    async def unsubscribe(self, client_id, routing_key):
-        channel = await self.getClientChannel(client_id)
-        queue_name = await self.getClientQueue(client_id)
+    async def unsubscribe(self, consumer_tag, routing_key):
+        channel = await self.getChannel(consumer_tag)
+        queue_name = await self.getQueue(consumer_tag)
         result = await channel.queue_unbind(
             exchange_name=self.exchange_name,
             queue_name=queue_name,
@@ -99,12 +108,55 @@ class Events(object):
         if not result:
             logging.error(
                 "amqp:events:{}:unsubscribe: {}; failed".format(
-                    client_id, routing_key
+                    consumer_tag, routing_key
             ))
         return result
 
-    async def addClient(self, client_id, callback):
-        await self.getClientConsumer(client_id, callback)
+    async def register(self, consumer_tag, callback):
+        await self.getConsumer(consumer_tag, callback)
 
-    async def removeClient(self, client_id):
-        await self.closeClientChannel(client_id)
+    async def unregister(self, consumer_tag):
+        await self.closeChannel(consumer_tag)
+
+
+class EventHandlerMeta(metaclass=ABCMeta):
+    @abstractmethod
+    async def handleEvent(self, event):
+        pass
+
+    async def handleRawEvent(self, channel, body, envelope, properties):
+        try:
+            event = json.loads(body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logging.error("event:handler: invalid json")
+        else:
+            event['routing_key'] = envelope.routing_key
+            await self.handleEvent(event)
+
+    def hasConsumerTag(self):
+        return hasattr(self, 'consumer_tag') and self.consumer_tag
+
+    async def startConsumingEvents(self):
+        if not self.hasConsumerTag():
+            self.consumer_tag = str(uuid.uuid4())
+            await EventConsumer().register(
+                self.consumer_tag, self.handleRawEvent
+            )
+
+    async def stopConsumingEvents(self):
+        if self.hasConsumerTag():
+            await EventConsumer().unregister(self.consumer_tag)
+            self.consumer_tag = None
+
+    async def subscribeEvents(self, routing_key):
+        if self.hasConsumerTag():
+            await EventConsumer().subscribe(
+                self.consumer_tag, routing_key
+            )
+        # TODO: what if not yet consuming?
+
+    async def unsubscribeEvents(self, routing_key):
+        if self.hasConsumerTag():
+            await EventConsumer().unsubscribe(
+                self.consumer_tag, routing_key
+            )
