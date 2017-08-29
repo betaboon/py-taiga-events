@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+import sys
 
 from . import amqp, signing, websocket
 
@@ -81,14 +82,14 @@ def parseArgs():
 def main():
     logging.basicConfig(level=logging.INFO)
     args = parseArgs()
-    logging.info(args)
 
     if args.pidfile and os.path.isfile(args.pidfile):
         print("{} already exists, exiting".format(args.pidfile))
         sys.exit()
     elif args.pidfile:
         pid = str(os.getpid())
-        file(args.pidfile, 'w').write(pid)
+        with open(args.pidfile, 'w') as f:
+            f.write(pid)
 
     try:
         signing.setConfig(
