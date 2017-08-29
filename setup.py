@@ -28,7 +28,7 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'taiga-events=taiga_events.__main__:main',
+            'taiga-events=taiga_events.cli:main',
         ]
     },
     install_requires=[
