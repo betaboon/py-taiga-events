@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 
-from .meta import Singleton
+from .util import Singleton
 
 
 class EventConsumer(metaclass=Singleton):

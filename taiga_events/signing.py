@@ -2,7 +2,7 @@ import base64
 import hashlib
 import hmac
 
-from .meta import Singleton
+from .util import Singleton
 
 
 class TokenInvalidError(ValueError):
