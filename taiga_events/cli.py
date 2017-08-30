@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from contextlib import contextmanager
 import logging
 import os
 import sys
@@ -69,7 +70,7 @@ def parseArgs():
     parser.add_argument("--pidfile",
         metavar="FILENAME",
         type=str,
-        default=None,
+        default="/tmp/taiga-events.pid",
         help="Write pidfile"
     )
     parser.add_argument("--help",
@@ -79,19 +80,21 @@ def parseArgs():
     return parser.parse_args()
 
 
+@contextmanager
+def pidfile(filename):
+    try:
+        with open(filename, 'w') as f:
+            f.write(str(os.getpid()))
+        yield
+    finally:
+        os.unlink(filename) 
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     args = parseArgs()
 
-    if args.pidfile and os.path.isfile(args.pidfile):
-        print("{} already exists, exiting".format(args.pidfile))
-        sys.exit()
-    elif args.pidfile:
-        pid = str(os.getpid())
-        with open(args.pidfile, 'w') as f:
-            f.write(pid)
-
-    try:
+    with pidfile(args.pidfile):
         signing.setConfig(
             salt=args.signingSalt,
             secret=args.signingSecret
@@ -114,9 +117,6 @@ def main():
         loop.run_until_complete(server.serve())
         loop.run_until_complete(events.consume())
         loop.run_forever()
-    finally:
-        if args.pidfile:
-            os.unlink(args.pidfile) 
 
 if __name__ == "__main__":
     main()
